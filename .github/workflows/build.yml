@@ -1,0 +1,106 @@
+name: Build unsigned IPA
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate .xcodeproj
+        run: xcodegen generate --spec project.yml
+
+      - name: Archive
+        run: |
+          xcodebuild archive \
+            -project HealthBridge.xcodeproj \
+            -scheme HealthBridge \
+            -configuration Release \
+            -sdk iphoneos \
+            -archivePath "$PWD/build/HealthBridge.xcarchive" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            DEVELOPMENT_TEAM=""
+
+      - name: Embed icons in app bundle
+        run: |
+          APP=$(find build/HealthBridge.xcarchive/Products -name "*.app" | head -1)
+          echo "App: $APP"
+          # Generate a simple health icon using SF Symbols fallback — just use a solid color icon
+          python3 - <<'EOF'
+          import struct, zlib
+
+          def make_png(size, r, g, b):
+              def chunk(name, data):
+                  c = zlib.crc32(name + data) & 0xffffffff
+                  return struct.pack('>I', len(data)) + name + data + struct.pack('>I', c)
+              raw = b''
+              for _ in range(size):
+                  row = b'\x00' + bytes([r, g, b, 255] * size)
+                  raw += row
+              compressed = zlib.compress(raw)
+              ihdr = struct.pack('>IIBBBBB', size, size, 8, 2, 0, 0, 0)
+              return b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', ihdr) + chunk(b'IDAT', compressed) + chunk(b'IEND', b'')
+
+          import os, sys
+          app = sys.argv[1] if len(sys.argv) > 1 else os.environ.get('APP_PATH', '')
+
+          sizes = [(180, 'AppIcon60x60@3x'), (120, 'AppIcon60x60@2x'),
+                   (87, 'AppIcon29x29@3x'), (58, 'AppIcon29x29@2x'),
+                   (80, 'AppIcon40x40@2x'), (120, 'AppIcon40x40@3x')]
+          for size, name in sizes:
+              with open(f'{app}/{name}.png', 'wb') as f:
+                  f.write(make_png(size, 52, 199, 89))  # green
+          print('Icons written')
+          EOF
+          APP_PATH=$APP python3 -c "
+          import os, struct, zlib, sys
+          app = os.environ['APP_PATH']
+
+          def make_png(size, r, g, b):
+              def chunk(name, data):
+                  c = zlib.crc32(name + data) & 0xffffffff
+                  return struct.pack('>I', len(data)) + name + data + struct.pack('>I', c)
+              raw = b''
+              for _ in range(size):
+                  row = b'\x00' + bytes([r, g, b, 255] * size)
+                  raw += row
+              compressed = zlib.compress(raw)
+              ihdr = struct.pack('>IIBBBBB', size, size, 8, 2, 0, 0, 0)
+              return b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', ihdr) + chunk(b'IDAT', compressed) + chunk(b'IEND', b'')
+
+          sizes = [(180,'AppIcon60x60@3x'),(120,'AppIcon60x60@2x'),(87,'AppIcon29x29@3x'),(58,'AppIcon29x29@2x'),(80,'AppIcon40x40@2x'),(120,'AppIcon40x40@3x')]
+          for size, name in sizes:
+              with open(f'{app}/{name}.png', 'wb') as f:
+                  f.write(make_png(size, 52, 199, 89))
+          print('Icons written')
+          "
+
+          PLIST="$APP/Info.plist"
+          /usr/libexec/PlistBuddy -c "Delete :CFBundleIcons" "$PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :CFBundleIcons dict" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Add :CFBundleIcons:CFBundlePrimaryIcon dict" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Add :CFBundleIcons:CFBundlePrimaryIcon:CFBundleIconFiles array" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Add :CFBundleIcons:CFBundlePrimaryIcon:CFBundleIconFiles:0 string AppIcon60x60" "$PLIST"
+
+      - name: Package IPA
+        run: |
+          APP=$(find build/HealthBridge.xcarchive/Products -name "*.app" | head -1)
+          rm -rf /tmp/Payload && mkdir -p /tmp/Payload/Payload
+          cp -r "$APP" /tmp/Payload/Payload/
+          cd /tmp/Payload && zip -r "$GITHUB_WORKSPACE/build/HealthBridge_unsigned.ipa" Payload
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: HealthBridge_unsigned
+          path: build/HealthBridge_unsigned.ipa
