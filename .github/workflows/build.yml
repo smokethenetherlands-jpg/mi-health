@@ -35,55 +35,30 @@ jobs:
         run: |
           APP=$(find build/HealthBridge.xcarchive/Products -name "*.app" | head -1)
           echo "App: $APP"
-          # Generate a simple health icon using SF Symbols fallback — just use a solid color icon
-          python3 - <<'EOF'
-          import struct, zlib
 
-          def make_png(size, r, g, b):
-              def chunk(name, data):
-                  c = zlib.crc32(name + data) & 0xffffffff
-                  return struct.pack('>I', len(data)) + name + data + struct.pack('>I', c)
-              raw = b''
-              for _ in range(size):
-                  row = b'\x00' + bytes([r, g, b, 255] * size)
-                  raw += row
-              compressed = zlib.compress(raw)
-              ihdr = struct.pack('>IIBBBBB', size, size, 8, 2, 0, 0, 0)
-              return b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', ihdr) + chunk(b'IDAT', compressed) + chunk(b'IEND', b'')
+          # Create a simple green PNG icon using Python, write to /tmp first
+          python3 -c "
+import struct, zlib
 
-          import os, sys
-          app = sys.argv[1] if len(sys.argv) > 1 else os.environ.get('APP_PATH', '')
+def make_png(size, r, g, b):
+    def chunk(name, data):
+        c = zlib.crc32(name + data) & 0xffffffff
+        return struct.pack('>I', len(data)) + name + data + struct.pack('>I', c)
+    raw = b''.join(b'\x00' + bytes([r, g, b, 255] * size) for _ in range(size))
+    ihdr = struct.pack('>IIBBBBB', size, size, 8, 2, 0, 0, 0)
+    return b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', ihdr) + chunk(b'IDAT', zlib.compress(raw)) + chunk(b'IEND', b'')
 
-          sizes = [(180, 'AppIcon60x60@3x'), (120, 'AppIcon60x60@2x'),
-                   (87, 'AppIcon29x29@3x'), (58, 'AppIcon29x29@2x'),
-                   (80, 'AppIcon40x40@2x'), (120, 'AppIcon40x40@3x')]
-          for size, name in sizes:
-              with open(f'{app}/{name}.png', 'wb') as f:
-                  f.write(make_png(size, 52, 199, 89))  # green
-          print('Icons written')
-          EOF
-          APP_PATH=$APP python3 -c "
-          import os, struct, zlib, sys
-          app = os.environ['APP_PATH']
+with open('/tmp/icon_src.png', 'wb') as f:
+    f.write(make_png(1024, 52, 199, 89))
+print('Source icon created')
+"
 
-          def make_png(size, r, g, b):
-              def chunk(name, data):
-                  c = zlib.crc32(name + data) & 0xffffffff
-                  return struct.pack('>I', len(data)) + name + data + struct.pack('>I', c)
-              raw = b''
-              for _ in range(size):
-                  row = b'\x00' + bytes([r, g, b, 255] * size)
-                  raw += row
-              compressed = zlib.compress(raw)
-              ihdr = struct.pack('>IIBBBBB', size, size, 8, 2, 0, 0, 0)
-              return b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', ihdr) + chunk(b'IDAT', compressed) + chunk(b'IEND', b'')
-
-          sizes = [(180,'AppIcon60x60@3x'),(120,'AppIcon60x60@2x'),(87,'AppIcon29x29@3x'),(58,'AppIcon29x29@2x'),(80,'AppIcon40x40@2x'),(120,'AppIcon40x40@3x')]
-          for size, name in sizes:
-              with open(f'{app}/{name}.png', 'wb') as f:
-                  f.write(make_png(size, 52, 199, 89))
-          print('Icons written')
-          "
+          # Resize with sips and copy to .app
+          sips -z 180 180 /tmp/icon_src.png --out "$APP/AppIcon60x60@3x.png"
+          sips -z 120 120 /tmp/icon_src.png --out "$APP/AppIcon60x60@2x.png"
+          sips -z 87  87  /tmp/icon_src.png --out "$APP/AppIcon29x29@3x.png"
+          sips -z 58  58  /tmp/icon_src.png --out "$APP/AppIcon29x29@2x.png"
+          sips -z 80  80  /tmp/icon_src.png --out "$APP/AppIcon40x40@2x.png"
 
           PLIST="$APP/Info.plist"
           /usr/libexec/PlistBuddy -c "Delete :CFBundleIcons" "$PLIST" 2>/dev/null || true
@@ -91,6 +66,7 @@ jobs:
           /usr/libexec/PlistBuddy -c "Add :CFBundleIcons:CFBundlePrimaryIcon dict" "$PLIST"
           /usr/libexec/PlistBuddy -c "Add :CFBundleIcons:CFBundlePrimaryIcon:CFBundleIconFiles array" "$PLIST"
           /usr/libexec/PlistBuddy -c "Add :CFBundleIcons:CFBundlePrimaryIcon:CFBundleIconFiles:0 string AppIcon60x60" "$PLIST"
+          echo "Icons embedded successfully"
 
       - name: Package IPA
         run: |
