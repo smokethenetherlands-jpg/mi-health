@@ -36,24 +36,8 @@ jobs:
           APP=$(find build/HealthBridge.xcarchive/Products -name "*.app" | head -1)
           echo "App: $APP"
 
-          # Create a simple green PNG icon using Python, write to /tmp first
-          python3 -c "
-import struct, zlib
+          python3 scripts/make_icon.py "$APP"
 
-def make_png(size, r, g, b):
-    def chunk(name, data):
-        c = zlib.crc32(name + data) & 0xffffffff
-        return struct.pack('>I', len(data)) + name + data + struct.pack('>I', c)
-    raw = b''.join(b'\x00' + bytes([r, g, b, 255] * size) for _ in range(size))
-    ihdr = struct.pack('>IIBBBBB', size, size, 8, 2, 0, 0, 0)
-    return b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', ihdr) + chunk(b'IDAT', zlib.compress(raw)) + chunk(b'IEND', b'')
-
-with open('/tmp/icon_src.png', 'wb') as f:
-    f.write(make_png(1024, 52, 199, 89))
-print('Source icon created')
-"
-
-          # Resize with sips and copy to .app
           sips -z 180 180 /tmp/icon_src.png --out "$APP/AppIcon60x60@3x.png"
           sips -z 120 120 /tmp/icon_src.png --out "$APP/AppIcon60x60@2x.png"
           sips -z 87  87  /tmp/icon_src.png --out "$APP/AppIcon29x29@3x.png"
