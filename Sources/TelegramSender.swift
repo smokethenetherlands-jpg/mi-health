@@ -17,11 +17,10 @@ struct TelegramSender {
 
         let text = """
 <b>\(date) · сводка</b>
-
-<tg-emoji emoji-id="5368747224949857891">🏃‍♂️</tg-emoji> \(steps) шагов
+<blockquote><tg-emoji emoji-id="5368747224949857891">🏃‍♂️</tg-emoji> \(steps) шагов
 <tg-emoji emoji-id="5462939542833086234">🥰</tg-emoji> \(pulse)
 <tg-emoji emoji-id="5452019171871177378">🍊</tg-emoji> \(kcal)
-<tg-emoji emoji-id="5301178881053565108">😴</tg-emoji> \(sleep)
+<tg-emoji emoji-id="5301178881053565108">😴</tg-emoji> \(sleep)</blockquote>
 """
         var req = URLRequest(url: URL(string: "https://api.telegram.org/bot\(token)/sendMessage")!)
         req.httpMethod = "POST"
