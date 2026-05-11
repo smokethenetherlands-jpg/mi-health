@@ -56,7 +56,8 @@ class HealthKitManager {
         return await withCheckedContinuation { cont in
             let q = HKSampleQuery(sampleType: type, predicate: predicate, limit: HKObjectQueryNoLimit, sortDescriptors: nil) { _, samples, _ in
                 let asleep: Set<Int> = [
-                    HKCategoryValueSleepAnalysis.asleep.rawValue,      // Mi Fitness и большинство не-Apple устройств
+                    HKCategoryValueSleepAnalysis.inBed.rawValue,
+                    HKCategoryValueSleepAnalysis.asleep.rawValue,
                     HKCategoryValueSleepAnalysis.asleepCore.rawValue,
                     HKCategoryValueSleepAnalysis.asleepREM.rawValue,
                     HKCategoryValueSleepAnalysis.asleepDeep.rawValue
