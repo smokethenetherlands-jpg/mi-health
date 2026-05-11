@@ -5,19 +5,32 @@ struct TelegramSender {
     private static let chatID = "597323588"
 
     static func send(_ data: HealthData) async {
-        let date = DateFormatter.localizedString(from: Date(), dateStyle: .long, timeStyle: .none)
-        let text = """
-📊 Отчёт за \(date)
+        let fmt = DateFormatter()
+        fmt.locale = Locale(identifier: "ru_RU")
+        fmt.dateFormat = "d MMMM"
+        let date = fmt.string(from: Date())
 
-👟 Шаги: \(data.steps.formatted())
-❤️ Пульс: \(data.heartRate > 0 ? "\(Int(data.heartRate)) уд/мин" : "нет данных")
-🔥 Калории: \(data.calories > 0 ? "\(Int(data.calories)) ккал" : "нет данных")
-😴 Сон: \(data.sleepHours > 0 ? formatSleep(data.sleepHours) : "нет данных")
+        let steps = data.steps > 0 ? data.steps.formatted() : "—"
+        let pulse = data.heartRate > 0 ? "\(Int(data.heartRate)) уд/мин" : "—"
+        let kcal  = data.calories > 0 ? "\(Int(data.calories)) ккал" : "—"
+        let sleep = data.sleepHours > 0 ? formatSleep(data.sleepHours) : "—"
+
+        let text = """
+<b>\(date) · сводка</b>
+
+🦶 \(steps) шагов
+❤️ \(pulse)
+🔥 \(kcal)
+🌙 \(sleep)
 """
         var req = URLRequest(url: URL(string: "https://api.telegram.org/bot\(token)/sendMessage")!)
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        req.httpBody = try? JSONSerialization.data(withJSONObject: ["chat_id": chatID, "text": text])
+        req.httpBody = try? JSONSerialization.data(withJSONObject: [
+            "chat_id": chatID,
+            "text": text,
+            "parse_mode": "HTML"
+        ])
         _ = try? await URLSession.shared.data(for: req)
     }
 }
