@@ -12,7 +12,7 @@ struct TelegramSender {
 👟 Шаги: \(data.steps.formatted())
 ❤️ Пульс: \(data.heartRate > 0 ? "\(Int(data.heartRate)) уд/мин" : "нет данных")
 🔥 Калории: \(data.calories > 0 ? "\(Int(data.calories)) ккал" : "нет данных")
-😴 Сон: \(data.sleepHours > 0 ? String(format: "%.1f ч", data.sleepHours) : "нет данных")
+😴 Сон: \(data.sleepHours > 0 ? formatSleep(data.sleepHours) : "нет данных")
 """
         var req = URLRequest(url: URL(string: "https://api.telegram.org/bot\(token)/sendMessage")!)
         req.httpMethod = "POST"

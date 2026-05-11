@@ -12,7 +12,7 @@ struct ContentView: View {
                     StatRow(icon: "figure.walk", color: .green, label: "Шаги", value: loading ? "—" : data.steps.formatted())
                     StatRow(icon: "heart.fill", color: .red, label: "Пульс", value: loading ? "—" : data.heartRate > 0 ? "\(Int(data.heartRate)) уд/мин" : "нет данных")
                     StatRow(icon: "flame.fill", color: .orange, label: "Калории", value: loading ? "—" : data.calories > 0 ? "\(Int(data.calories)) ккал" : "нет данных")
-                    StatRow(icon: "moon.fill", color: .indigo, label: "Сон", value: loading ? "—" : data.sleepHours > 0 ? String(format: "%.1f ч", data.sleepHours) : "нет данных")
+                    StatRow(icon: "moon.fill", color: .indigo, label: "Сон", value: loading ? "—" : data.sleepHours > 0 ? formatSleep(data.sleepHours) : "нет данных")
                 }
 
                 Section {
