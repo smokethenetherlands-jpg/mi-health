@@ -23,20 +23,25 @@ class HealthKitManager {
     }
 
     func fetchTodayData() async -> HealthData {
-        async let steps = fetchSteps()
-        async let heartRate = fetchHeartRate()
-        async let calories = fetchCalories()
+        let start = Calendar.current.startOfDay(for: Date())
+        return await fetchData(from: start, to: Date())
+    }
+
+    func fetchData(from start: Date, to end: Date) async -> HealthData {
+        async let steps = fetchSteps(from: start, to: end)
+        async let heartRate = fetchHeartRate(from: start, to: end)
+        async let calories = fetchCalories(from: start, to: end)
         async let sleep = fetchSleep()
         return await HealthData(steps: steps, heartRate: heartRate, calories: calories, sleepHours: sleep)
     }
 
-    private func fetchSteps() async -> Int {
-        await fetchSum(.stepCount, unit: .count()).map { Int($0) } ?? 0
+    private func fetchSteps(from start: Date, to end: Date) async -> Int {
+        await fetchSum(.stepCount, unit: .count(), from: start, to: end).map { Int($0) } ?? 0
     }
 
-    private func fetchHeartRate() async -> Double {
+    private func fetchHeartRate(from start: Date, to end: Date) async -> Double {
         let type = HKQuantityType(.heartRate)
-        let predicate = todayPredicate()
+        let predicate = HKQuery.predicateForSamples(withStart: start, end: end)
         return await withCheckedContinuation { cont in
             let q = HKStatisticsQuery(quantityType: type, quantitySamplePredicate: predicate, options: .discreteAverage) { _, r, _ in
                 cont.resume(returning: r?.averageQuantity()?.doubleValue(for: HKUnit(from: "count/min")) ?? 0)
@@ -45,19 +50,17 @@ class HealthKitManager {
         }
     }
 
-    private func fetchCalories() async -> Double {
-        await fetchSum(.activeEnergyBurned, unit: .kilocalorie()) ?? 0
+    private func fetchCalories(from start: Date, to end: Date) async -> Double {
+        await fetchSum(.activeEnergyBurned, unit: .kilocalorie(), from: start, to: end) ?? 0
     }
 
     private func fetchSleep() async -> Double {
         let type = HKCategoryType(.sleepAnalysis)
-        // 18 часов назад — захватывает только последнюю ночь, не две
         let start = Calendar.current.date(byAdding: .hour, value: -18, to: Date())!
         let predicate = HKQuery.predicateForSamples(withStart: start, end: Date())
         return await withCheckedContinuation { cont in
             let q = HKSampleQuery(sampleType: type, predicate: predicate, limit: HKObjectQueryNoLimit, sortDescriptors: nil) { _, samples, _ in
                 let all = samples as? [HKCategorySample] ?? []
-                // Приоритет: фазы сна (Apple Watch) > asleep > inBed, без двойного счёта
                 let hasPhases = all.contains {
                     [HKCategoryValueSleepAnalysis.asleepCore.rawValue,
                      HKCategoryValueSleepAnalysis.asleepREM.rawValue,
@@ -78,18 +81,14 @@ class HealthKitManager {
         }
     }
 
-    private func fetchSum(_ id: HKQuantityTypeIdentifier, unit: HKUnit) async -> Double? {
+    private func fetchSum(_ id: HKQuantityTypeIdentifier, unit: HKUnit, from start: Date, to end: Date) async -> Double? {
         let type = HKQuantityType(id)
-        let predicate = todayPredicate()
+        let predicate = HKQuery.predicateForSamples(withStart: start, end: end)
         return await withCheckedContinuation { cont in
             let q = HKStatisticsQuery(quantityType: type, quantitySamplePredicate: predicate, options: .cumulativeSum) { _, r, _ in
                 cont.resume(returning: r?.sumQuantity()?.doubleValue(for: unit))
             }
             store.execute(q)
         }
-    }
-
-    private func todayPredicate() -> NSPredicate {
-        HKQuery.predicateForSamples(withStart: Calendar.current.startOfDay(for: Date()), end: Date())
     }
 }

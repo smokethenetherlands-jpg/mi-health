@@ -15,31 +15,46 @@ struct HealthBridgeApp: App {
         WindowGroup {
             ContentView()
                 .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
-                    scheduleDailyReportIfNeeded()
+                    scheduleDailyReportsIfNeeded()
                 }
         }
     }
 }
 
 func handleDailyReport(task: BGAppRefreshTask) {
+    let isMorning = task.identifier == "com.user.healthbridge.morning"
     scheduleNextReports()
     let t = Task {
-        let data = await HealthKitManager.shared.fetchTodayData()
-        await TelegramSender.send(data)
+        if isMorning { await sendMorningReport() } else { await sendEveningReport() }
         task.setTaskCompleted(success: true)
-        UserDefaults.standard.set(Date(), forKey: "lastReportDate")
     }
     task.expirationHandler = { t.cancel() }
 }
 
-func scheduleDailyReportIfNeeded() {
+func scheduleDailyReportsIfNeeded() {
     scheduleNextReports()
     Task {
-        guard !reportSentRecently() else { return }
-        let data = await HealthKitManager.shared.fetchTodayData()
-        await TelegramSender.send(data)
-        UserDefaults.standard.set(Date(), forKey: "lastReportDate")
+        let hour = Calendar.current.component(.hour, from: Date())
+        if hour >= 8  { await sendMorningReport() }
+        if hour >= 21 { await sendEveningReport() }
     }
+}
+
+func sendMorningReport() async {
+    guard !reportSentToday(key: "lastMorningReport") else { return }
+    let cal = Calendar.current
+    let todayStart = cal.startOfDay(for: Date())
+    let yesterdayStart = cal.date(byAdding: .day, value: -1, to: todayStart)!
+    let data = await HealthKitManager.shared.fetchData(from: yesterdayStart, to: todayStart)
+    await TelegramSender.send(data, title: "\(formatDate(yesterdayStart)) · итог дня")
+    UserDefaults.standard.set(Date(), forKey: "lastMorningReport")
+}
+
+func sendEveningReport() async {
+    guard !reportSentToday(key: "lastEveningReport") else { return }
+    let data = await HealthKitManager.shared.fetchData(from: Calendar.current.startOfDay(for: Date()), to: Date())
+    await TelegramSender.send(data, title: "\(formatDate(Date())) · сводка")
+    UserDefaults.standard.set(Date(), forKey: "lastEveningReport")
 }
 
 func scheduleNextReports() {
@@ -54,8 +69,14 @@ func scheduleNextReports() {
     }
 }
 
-// Считаем "уже отправлено" если прошло менее 20 часов — защита от дублей при двух слотах
-func reportSentRecently() -> Bool {
-    guard let last = UserDefaults.standard.object(forKey: "lastReportDate") as? Date else { return false }
-    return Date().timeIntervalSince(last) < 20 * 3600
+func reportSentToday(key: String) -> Bool {
+    guard let last = UserDefaults.standard.object(forKey: key) as? Date else { return false }
+    return Calendar.current.isDateInToday(last)
+}
+
+func formatDate(_ date: Date) -> String {
+    let fmt = DateFormatter()
+    fmt.locale = Locale(identifier: "ru_RU")
+    fmt.dateFormat = "d MMMM"
+    return fmt.string(from: date)
 }

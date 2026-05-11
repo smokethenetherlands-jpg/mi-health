@@ -19,8 +19,7 @@ struct ContentView: View {
                     Button {
                         Task {
                             status = "Отправляю..."
-                            await TelegramSender.send(data)
-                            UserDefaults.standard.set(Date(), forKey: "lastReportDate")
+                            await TelegramSender.send(data, title: "\(formatDate(Date())) · сводка")
                             status = "Отправлено ✓"
                         }
                     } label: {
