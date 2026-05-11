@@ -31,27 +31,6 @@ jobs:
             CODE_SIGN_IDENTITY="" \
             DEVELOPMENT_TEAM=""
 
-      - name: Embed icons in app bundle
-        run: |
-          APP=$(find build/HealthBridge.xcarchive/Products -name "*.app" | head -1)
-          echo "App: $APP"
-
-          python3 scripts/make_icon.py "$APP"
-
-          sips -z 180 180 /tmp/icon_src.png --out "$APP/AppIcon60x60@3x.png"
-          sips -z 120 120 /tmp/icon_src.png --out "$APP/AppIcon60x60@2x.png"
-          sips -z 87  87  /tmp/icon_src.png --out "$APP/AppIcon29x29@3x.png"
-          sips -z 58  58  /tmp/icon_src.png --out "$APP/AppIcon29x29@2x.png"
-          sips -z 80  80  /tmp/icon_src.png --out "$APP/AppIcon40x40@2x.png"
-
-          PLIST="$APP/Info.plist"
-          /usr/libexec/PlistBuddy -c "Delete :CFBundleIcons" "$PLIST" 2>/dev/null || true
-          /usr/libexec/PlistBuddy -c "Add :CFBundleIcons dict" "$PLIST"
-          /usr/libexec/PlistBuddy -c "Add :CFBundleIcons:CFBundlePrimaryIcon dict" "$PLIST"
-          /usr/libexec/PlistBuddy -c "Add :CFBundleIcons:CFBundlePrimaryIcon:CFBundleIconFiles array" "$PLIST"
-          /usr/libexec/PlistBuddy -c "Add :CFBundleIcons:CFBundlePrimaryIcon:CFBundleIconFiles:0 string AppIcon60x60" "$PLIST"
-          echo "Icons embedded successfully"
-
       - name: Package IPA
         run: |
           APP=$(find build/HealthBridge.xcarchive/Products -name "*.app" | head -1)

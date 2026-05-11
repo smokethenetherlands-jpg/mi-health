@@ -24,7 +24,8 @@
     <string>Приложение не записывает данные в Health.</string>
     <key>BGTaskSchedulerPermittedIdentifiers</key>
     <array>
-        <string>com.user.healthbridge.daily</string>
+        <string>com.user.healthbridge.morning</string>
+        <string>com.user.healthbridge.evening</string>
     </array>
     <key>UIBackgroundModes</key>
     <array>

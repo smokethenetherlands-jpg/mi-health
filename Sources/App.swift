@@ -4,8 +4,10 @@ import BackgroundTasks
 @main
 struct HealthBridgeApp: App {
     init() {
-        BGTaskScheduler.shared.register(forTaskWithIdentifier: "com.user.healthbridge.daily", using: nil) { task in
-            handleDailyReport(task: task as! BGAppRefreshTask)
+        for id in ["com.user.healthbridge.morning", "com.user.healthbridge.evening"] {
+            BGTaskScheduler.shared.register(forTaskWithIdentifier: id, using: nil) { task in
+                handleDailyReport(task: task as! BGAppRefreshTask)
+            }
         }
     }
 
@@ -20,7 +22,7 @@ struct HealthBridgeApp: App {
 }
 
 func handleDailyReport(task: BGAppRefreshTask) {
-    scheduleNextDailyReport()
+    scheduleNextReports()
     let t = Task {
         let data = await HealthKitManager.shared.fetchTodayData()
         await TelegramSender.send(data)
@@ -31,26 +33,29 @@ func handleDailyReport(task: BGAppRefreshTask) {
 }
 
 func scheduleDailyReportIfNeeded() {
-    scheduleNextDailyReport()
+    scheduleNextReports()
     Task {
-        guard !reportSentToday() else { return }
+        guard !reportSentRecently() else { return }
         let data = await HealthKitManager.shared.fetchTodayData()
         await TelegramSender.send(data)
         UserDefaults.standard.set(Date(), forKey: "lastReportDate")
     }
 }
 
-func scheduleNextDailyReport() {
-    let request = BGAppRefreshTaskRequest(identifier: "com.user.healthbridge.daily")
-    request.earliestBeginDate = Calendar.current.nextDate(
-        after: Date(),
-        matching: DateComponents(hour: 8, minute: 0),
-        matchingPolicy: .nextTime
-    )
-    try? BGTaskScheduler.shared.submit(request)
+func scheduleNextReports() {
+    let slots: [(String, DateComponents)] = [
+        ("com.user.healthbridge.morning", DateComponents(hour: 8, minute: 0)),
+        ("com.user.healthbridge.evening", DateComponents(hour: 21, minute: 0))
+    ]
+    for (id, time) in slots {
+        let request = BGAppRefreshTaskRequest(identifier: id)
+        request.earliestBeginDate = Calendar.current.nextDate(after: Date(), matching: time, matchingPolicy: .nextTime)
+        try? BGTaskScheduler.shared.submit(request)
+    }
 }
 
-func reportSentToday() -> Bool {
+// Считаем "уже отправлено" если прошло менее 20 часов — защита от дублей при двух слотах
+func reportSentRecently() -> Bool {
     guard let last = UserDefaults.standard.object(forKey: "lastReportDate") as? Date else { return false }
-    return Calendar.current.isDateInToday(last)
+    return Date().timeIntervalSince(last) < 20 * 3600
 }
