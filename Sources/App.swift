@@ -1,38 +1,48 @@
 import SwiftUI
-import BackgroundTasks
+import UserNotifications
 
 @main
 struct HealthBridgeApp: App {
     init() {
-        for id in ["com.user.healthbridge.morning", "com.user.healthbridge.evening"] {
-            BGTaskScheduler.shared.register(forTaskWithIdentifier: id, using: nil) { task in
-                handleDailyReport(task: task as! BGAppRefreshTask)
-            }
-        }
+        requestNotificationPermission()
     }
 
     var body: some Scene {
         WindowGroup {
             ContentView()
                 .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
+                    scheduleNotifications()
                     scheduleDailyReportsIfNeeded()
                 }
         }
     }
 }
 
-func handleDailyReport(task: BGAppRefreshTask) {
-    let isMorning = task.identifier == "com.user.healthbridge.morning"
-    scheduleNextReports()
-    let t = Task {
-        if isMorning { await sendMorningReport() } else { await sendEveningReport() }
-        task.setTaskCompleted(success: true)
+func requestNotificationPermission() {
+    UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
+}
+
+func scheduleNotifications() {
+    let center = UNUserNotificationCenter.current()
+    center.removeAllPendingNotificationRequests()
+    let slots: [(String, Int, String)] = [
+        ("morning", 8,  "Итог вчерашнего дня"),
+        ("evening", 21, "Сводка за сегодня")
+    ]
+    for (id, hour, body) in slots {
+        let content = UNMutableNotificationContent()
+        content.title = "HealthBridge"
+        content.body = body
+        content.sound = .default
+        var dc = DateComponents()
+        dc.hour = hour
+        dc.minute = 0
+        let trigger = UNCalendarNotificationTrigger(dateMatching: dc, repeats: true)
+        center.add(UNNotificationRequest(identifier: id, content: content, trigger: trigger))
     }
-    task.expirationHandler = { t.cancel() }
 }
 
 func scheduleDailyReportsIfNeeded() {
-    scheduleNextReports()
     Task {
         let hour = Calendar.current.component(.hour, from: Date())
         if hour >= 8  { await sendMorningReport() }
@@ -46,6 +56,7 @@ func sendMorningReport() async {
     let todayStart = cal.startOfDay(for: Date())
     let yesterdayStart = cal.date(byAdding: .day, value: -1, to: todayStart)!
     let data = await HealthKitManager.shared.fetchData(from: yesterdayStart, to: todayStart)
+    guard data.steps > 0 || data.heartRate > 0 || data.calories > 0 else { return }
     await TelegramSender.send(data, title: "\(formatDate(yesterdayStart)) · итог дня")
     UserDefaults.standard.set(Date(), forKey: "lastMorningReport")
 }
@@ -53,20 +64,9 @@ func sendMorningReport() async {
 func sendEveningReport() async {
     guard !reportSentToday(key: "lastEveningReport") else { return }
     let data = await HealthKitManager.shared.fetchData(from: Calendar.current.startOfDay(for: Date()), to: Date())
+    guard data.steps > 0 || data.heartRate > 0 || data.calories > 0 else { return }
     await TelegramSender.send(data, title: "\(formatDate(Date())) · сводка")
     UserDefaults.standard.set(Date(), forKey: "lastEveningReport")
-}
-
-func scheduleNextReports() {
-    let slots: [(String, DateComponents)] = [
-        ("com.user.healthbridge.morning", DateComponents(hour: 8, minute: 0)),
-        ("com.user.healthbridge.evening", DateComponents(hour: 21, minute: 0))
-    ]
-    for (id, time) in slots {
-        let request = BGAppRefreshTaskRequest(identifier: id)
-        request.earliestBeginDate = Calendar.current.nextDate(after: Date(), matching: time, matchingPolicy: .nextTime)
-        try? BGTaskScheduler.shared.submit(request)
-    }
 }
 
 func reportSentToday(key: String) -> Bool {

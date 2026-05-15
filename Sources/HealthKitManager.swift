@@ -56,8 +56,10 @@ class HealthKitManager {
 
     private func fetchSleep() async -> Double {
         let type = HKCategoryType(.sleepAnalysis)
-        let start = Calendar.current.date(byAdding: .hour, value: -18, to: Date())!
-        let predicate = HKQuery.predicateForSamples(withStart: start, end: Date())
+        let midnight = Calendar.current.startOfDay(for: Date())
+        let sleepStart = midnight.addingTimeInterval(-4 * 3600)   // вчера 20:00
+        let sleepEnd = min(midnight.addingTimeInterval(12 * 3600), Date())  // сегодня 12:00 или сейчас
+        let predicate = HKQuery.predicateForSamples(withStart: sleepStart, end: sleepEnd)
         return await withCheckedContinuation { cont in
             let q = HKSampleQuery(sampleType: type, predicate: predicate, limit: HKObjectQueryNoLimit, sortDescriptors: nil) { _, samples, _ in
                 let all = samples as? [HKCategorySample] ?? []
@@ -66,12 +68,17 @@ class HealthKitManager {
                      HKCategoryValueSleepAnalysis.asleepREM.rawValue,
                      HKCategoryValueSleepAnalysis.asleepDeep.rawValue].contains($0.value)
                 }
-                let wanted: Set<Int> = hasPhases
-                    ? [HKCategoryValueSleepAnalysis.asleepCore.rawValue,
-                       HKCategoryValueSleepAnalysis.asleepREM.rawValue,
-                       HKCategoryValueSleepAnalysis.asleepDeep.rawValue]
-                    : [HKCategoryValueSleepAnalysis.asleep.rawValue,
-                       HKCategoryValueSleepAnalysis.inBed.rawValue]
+                let hasAsleep = all.contains { $0.value == HKCategoryValueSleepAnalysis.asleep.rawValue }
+                let wanted: Set<Int>
+                if hasPhases {
+                    wanted = [HKCategoryValueSleepAnalysis.asleepCore.rawValue,
+                              HKCategoryValueSleepAnalysis.asleepREM.rawValue,
+                              HKCategoryValueSleepAnalysis.asleepDeep.rawValue]
+                } else if hasAsleep {
+                    wanted = [HKCategoryValueSleepAnalysis.asleep.rawValue]
+                } else {
+                    wanted = [HKCategoryValueSleepAnalysis.inBed.rawValue]
+                }
                 let seconds = all
                     .filter { wanted.contains($0.value) }
                     .reduce(0.0) { $0 + $1.endDate.timeIntervalSince($1.startDate) }

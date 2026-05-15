@@ -22,16 +22,6 @@
     <string>Приложение читает данные о шагах, пульсе, калориях и сне для отправки отчётов в Telegram.</string>
     <key>NSHealthUpdateUsageDescription</key>
     <string>Приложение не записывает данные в Health.</string>
-    <key>BGTaskSchedulerPermittedIdentifiers</key>
-    <array>
-        <string>com.user.healthbridge.morning</string>
-        <string>com.user.healthbridge.evening</string>
-    </array>
-    <key>UIBackgroundModes</key>
-    <array>
-        <string>fetch</string>
-        <string>processing</string>
-    </array>
     <key>UILaunchScreen</key>
     <dict/>
     <key>UISupportedInterfaceOrientations</key>
